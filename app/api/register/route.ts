@@ -1,19 +1,22 @@
-#! app/api/register/route.ts
+// app/api/register/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";  // ← Importa desde lib
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
-
 export async function POST(req: NextRequest) {
-  const { name, email, password, role, storeName, bio } = await req.json();
-
-  const hashedPassword = await bcrypt.hash(password, 12);
-
   try {
+    const { name, email, password, role, storeName, bio } = await req.json();
+
+    // Validación básica
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email and password required" }, { status: 400 });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     const user = await prisma.user.create({
       data: {
-        name,
+        name: name || null,
         email,
         password: hashedPassword,
         role: role || "BUYER",
@@ -21,8 +24,16 @@ export async function POST(req: NextRequest) {
         bio: role === "SELLER" ? bio : null,
       },
     });
+    
     return NextResponse.json({ message: "Account created successfully!" }, { status: 201 });
-  } catch (e) {
-    return NextResponse.json({ error: "Email already exists" }, { status: 400 });
+  } catch (e: any) {
+    console.error("Registration error:", e);
+    
+    // Error de email duplicado
+    if (e.code === 'P2002') {
+      return NextResponse.json({ error: "Email already exists" }, { status: 400 });
+    }
+    
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
