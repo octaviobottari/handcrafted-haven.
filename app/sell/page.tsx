@@ -4,14 +4,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 import { PrismaClient } from "@prisma/client";
-import { writeFile } from "fs/promises";
-import path from "path";
+import { put } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 
 const prisma = new PrismaClient();
 
 async function uploadProduct(formData: FormData) {
-  "use server"; // ← this is required for the action
+  "use server";
 
   const session = await getServerSession(authOptions);
   if (!session || (session.user as any).role !== "SELLER") {
@@ -26,19 +25,17 @@ async function uploadProduct(formData: FormData) {
 
   if (!file) throw new Error("No image selected");
 
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const filename = `${Date.now()}-${file.name.replace(/\s+/g, "-")}`;
-  const filepath = path.join(process.cwd(), "public", "uploads", filename);
-
-  await writeFile(filepath, buffer);
+ 
+  const blob = await put(file.name, file, {
+    access: "public",
+  });
 
   await prisma.product.create({
     data: {
       name,
       description,
       price,
-      image: `/uploads/${filename}`,
+      image: blob.url,
       category: category || "Other",
       sellerId: session.user.id as string,
     },
